@@ -1,6 +1,9 @@
 import cv2
 import numpy as np
+import requests
 import os
+
+hostname = 'http://localhost:3000/parking/events/'
 
 class DirectionalCarTracker:
     def __init__(self, weights_path, config_path, names_path, entry_zone, exit_zone):
@@ -156,6 +159,8 @@ class DirectionalCarTracker:
                 # If car was previously in exit zone, count as entered
                 if current_state['in_exit_zone'] and not current_state['entered_from_start']:
                     self.cars_entered += 1
+                    response = requests.post(hostname, json={"eventType": "enter", "vehicleId": str(car_id), "lotId": 1})
+                    print(response.status_code, response.text)
                     current_state['entered_from_start'] = True
             
             if is_in_exit_zone and not current_state['in_exit_zone']:
@@ -164,6 +169,8 @@ class DirectionalCarTracker:
                 # If car was previously in entry zone, count as exited
                 if current_state['in_entry_zone'] and not current_state['exited_from_start']:
                     self.cars_exited += 1
+                    response = requests.post(hostname, json={"eventType": "exit", "vehicleId": str(car_id), "lotId": 1})
+                    print(response.status_code, response.text)
                     current_state['exited_from_start'] = True
 
     def _point_in_zone(self, x, y, zone):
@@ -200,7 +207,7 @@ def main():
     names_path = './coco.names'
     
     # Video path
-    video_path = './recourse/cars.mp4'
+    video_path = './cars.mp4'
     
     # Open video capture
     cap = cv2.VideoCapture(video_path)
