@@ -1,9 +1,10 @@
 import cv2
 import numpy as np
 import requests
-import os
 
+# configuration
 hostname = 'http://localhost:3000/parking/events/'
+is_debug = True
 
 class DirectionalCarTracker:
     def __init__(self, weights_path, config_path, names_path, entry_zone, exit_zone):
@@ -159,7 +160,9 @@ class DirectionalCarTracker:
                 # If car was previously in exit zone, count as entered
                 if current_state['in_exit_zone'] and not current_state['entered_from_start']:
                     self.cars_entered += 1
-                    response = requests.post(hostname, json={"eventType": "enter", "vehicleId": str(car_id), "lotId": 1})
+                    if not is_debug:
+                        # Send event to server
+                        response = requests.post(hostname, json={"eventType": "enter", "vehicleId": str(car_id), "lotId": 1})
                     print(response.status_code, response.text)
                     current_state['entered_from_start'] = True
             
@@ -169,7 +172,9 @@ class DirectionalCarTracker:
                 # If car was previously in entry zone, count as exited
                 if current_state['in_entry_zone'] and not current_state['exited_from_start']:
                     self.cars_exited += 1
-                    response = requests.post(hostname, json={"eventType": "exit", "vehicleId": str(car_id), "lotId": 1})
+                    if not is_debug:
+                        # Send event to server
+                        response = requests.post(hostname, json={"eventType": "exit", "vehicleId": str(car_id), "lotId": 1})
                     print(response.status_code, response.text)
                     current_state['exited_from_start'] = True
 
@@ -236,7 +241,10 @@ def main():
     tracker = DirectionalCarTracker(weights_path, config_path, names_path, entry_zone, exit_zone)
     
     while True:
-        ret, frame = cap.read()
+        # ret, frame = cap.read()
+        ret = cap.read()
+        frame = cv2.imread('./frame_1.jpg')
+        
         if not ret:
             break
         
