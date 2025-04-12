@@ -2,9 +2,12 @@ import cv2
 import numpy as np
 import requests
 
+import threading
+import time
+
 # configuration
 hostname = 'http://localhost:3000/parking/events/'
-is_debug = True
+is_debug = False
 
 class DirectionalCarTracker:
     def __init__(self, weights_path, config_path, names_path, entry_zone, exit_zone):
@@ -205,45 +208,100 @@ class DirectionalCarTracker:
         
         return intersection_area / union_area
 
+class Camera:
+    def __init__(self, rtsp_link):
+        self.capture = cv2.VideoCapture(rtsp_link)
+        self.last_frame = None
+        self.last_ready = False
+        self.lock = threading.Lock()
+        self.running = True
+
+
+    def start(self):
+        # Start the thread to read frames
+        self.thread = threading.Thread(target=self.rtsp_cam_buffer, name="rtsp_read_thread")
+        self.thread.daemon = True
+        self.thread.start()
+                    
+    def rtsp_cam_buffer(self):
+        while self.running:
+            with self.lock:
+                self.last_ready, self.last_frame = self.capture.read()
+                time.sleep(0.02)
+                # if not self.last_ready:
+                #     print("Failed to grab frame. Retrying...")
+
+    def get_frame(self):
+        with self.lock:
+            if self.last_ready and self.last_frame is not None:
+                return self.last_frame.copy()
+            else:
+                return None
+
+    def stop(self):
+        self.running = False
+        self.thread.join()
+        self.capture.release()
+
 def main():
+    # debugFrame = cv2.imread('./frame_1.jpg')
+    
     # YOLO configuration paths
     weights_path = './yolov4.weights'
     config_path = './yolov4.cfg'
     names_path = './coco.names'
     
     # Video path
-    video_path = './cars.mp4'
+    # video_path = './cars.mp4'
     
     # Open video capture
-    cap = cv2.VideoCapture(video_path)
+    # cap = cv2.VideoCapture(video_path)
+    
+    # For RTSP stream, use the Camera class
+    tapoHost = 'rtsp://admintapo:tapocam9899@192.168.1.101/stream1'
+    camera = Camera(tapoHost)
+    camera.start()
     
     # Get video properties
-    frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    # frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    # frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    # Prod
+    frame_width = int(camera.capture.get(cv2.CAP_PROP_FRAME_WIDTH))
+    frame_height = int(camera.capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    # Debug Frame
+    # frame_width = debugFrame.shape[1]
+    # frame_height = debugFrame.shape[0]
     
     # Define advanced zones (polygon zones)
     # Adjust these zones based on your specific video layout
+    # entry_zone = [
+    #     (0, frame_height // 3),
+    #     (frame_width, frame_height // 3),
+    #     (frame_width, frame_height // 3 + 50),
+    #     (0, frame_height // 3 + 50)
+    # ]
     entry_zone = [
-        (0, frame_height // 3),
-        (frame_width, frame_height // 3),
-        (frame_width, frame_height // 3 + 50),
-        (0, frame_height // 3 + 50)
+        (frame_width // 6, 0),
+        (frame_width // 6 + 50, 0),
+        (frame_width // 6 + 50, frame_height),
+        (frame_width // 6, frame_height)
     ]
     
     exit_zone = [
-        (0, frame_height * 2 // 3),
-        (frame_width, frame_height * 2 // 3),
-        (frame_width, frame_height * 2 // 3 + 50),
-        (0, frame_height * 2 // 3 + 50)
+        (frame_width // 3, 0),
+        (frame_width // 3 + 50, 0),
+        (frame_width // 3 + 50, frame_height),
+        (frame_width // 3, frame_height)
     ]
     
     # Initialize directional tracker
     tracker = DirectionalCarTracker(weights_path, config_path, names_path, entry_zone, exit_zone)
     
     while True:
+        time.sleep(0.001)
         # ret, frame = cap.read()
-        ret = cap.read()
-        frame = cv2.imread('./frame_1.jpg')
+        ret = camera.capture.read()
+        frame = camera.get_frame()
         
         if not ret:
             break
@@ -280,14 +338,15 @@ def main():
                     cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
         
         # Show frame
-        cv2.imshow('Directional Car Tracking', frame)
+        # cv2.imshow('Directional Car Tracking', frame)
         
         # Exit option
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
     
     # Cleanup
-    cap.release()
+    # cap.release()
+    camera.stop()
     cv2.destroyAllWindows()
     
     # Final statistics
